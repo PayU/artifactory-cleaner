@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class Config {
 
-    static final String DEFAULT_PROPERTIES_FILE_PATH = "artifactory-cleaner.properties";
+    private static final String DEFAULT_PROPERTIES_FILE_PATH = "artifactory-cleaner.properties";
 
     private final Properties properties;
 
