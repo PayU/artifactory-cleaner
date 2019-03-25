@@ -19,6 +19,7 @@ package com.payu.artifactory.tools.docker;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -36,7 +37,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.payu.artifactory.tools.util.WrappedException;
+import io.github.resilience4j.retry.Retry;
 
 @ExtendWith(MockitoExtension.class)
 class DockerImagesCleanerTest {
@@ -53,6 +54,8 @@ class DockerImagesCleanerTest {
     @Mock
     private RepositoryHandle repository;
 
+    private Retry retry = Retry.ofDefaults("id");
+
     @Test
     public void snapshotShouldBeDeletedForExistingReleaseVersion() throws IOException {
 
@@ -67,7 +70,7 @@ class DockerImagesCleanerTest {
         when(artifactory.repository(TEST_REPO)).thenReturn(repository);
 
         // when
-        new DockerImagesCleaner(artifactory, TEST_REPO).execute();
+        new DockerImagesCleaner(artifactory, retry, TEST_REPO).execute();
 
         // then
         verify(repository).delete(PAYU_TEST_IMAGE + "/1.0-SNAPSHOT");
@@ -84,9 +87,11 @@ class DockerImagesCleanerTest {
         when(artifactory.restCall(any(ArtifactoryRequest.class))).thenThrow(new IOException());
 
         //when
-        Assertions.assertThrows(WrappedException.class, () -> new DockerImagesCleaner(artifactory, TEST_REPO).execute());
+        Assertions.assertThrows(IOException.class,
+                () -> new DockerImagesCleaner(artifactory, retry, TEST_REPO).execute());
 
         // then
+        verify(artifactory, times(3)).restCall(any(ArtifactoryRequest.class));
         verifyNoMoreInteractions(artifactory);
         verifyNoMoreInteractions(response);
         verifyNoMoreInteractions(repository);

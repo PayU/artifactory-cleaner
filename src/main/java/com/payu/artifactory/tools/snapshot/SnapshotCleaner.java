@@ -19,26 +19,29 @@ package com.payu.artifactory.tools.snapshot;
 
 import static org.jfrog.artifactory.client.ArtifactoryRequest.Method.GET;
 
-import java.io.IOException;
 import java.util.Objects;
 
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.impl.ArtifactoryRequestImpl;
 
-import com.payu.artifactory.tools.util.WrappedException;
-
+import io.github.resilience4j.retry.Retry;
+import io.vavr.CheckedFunction0;
+import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class SnapshotCleaner {
 
     private final Artifactory artifactory;
+    private final Retry retry;
     private final String snapshotRepo;
     private final String releaseRepo;
 
-    public SnapshotCleaner(Artifactory artifactory, String snapshotRepo, String releaseRepo) {
+    public SnapshotCleaner(Artifactory artifactory, Retry retry, String snapshotRepo, String releaseRepo) {
         Objects.requireNonNull(artifactory, "artifactory must be set");
+        Objects.requireNonNull(retry, "retry must be set");
         this.artifactory = artifactory;
+        this.retry = retry;
         this.snapshotRepo = snapshotRepo;
         this.releaseRepo = releaseRepo;
     }
@@ -50,16 +53,14 @@ public class SnapshotCleaner {
 
     private StorageList getStorageList(String repo, String path) {
 
-        try {
-            ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
-                    .apiUrl("api/storage/" + repo + path)
-                    .method(GET);
+        ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
+                .apiUrl("api/storage/" + repo + path)
+                .method(GET);
 
-            return artifactory.restCall(request)
-                    .parseBody(StorageList.class);
-        } catch (IOException e) {
-            throw new WrappedException(e);
-        }
+        CheckedFunction0<StorageList> supplier = Retry.decorateCheckedSupplier(retry,
+                () -> artifactory.restCall(request).parseBody(StorageList.class));
+
+        return Try.of(supplier).get();
     }
 
     private void walk(String path) {
