@@ -49,7 +49,9 @@ public class DockerImagesCleaner {
                 .method(GET);
 
         Try.of(Retry.decorateCheckedSupplier(retry,
-                () -> artifactory.restCall(request).parseBody(DockerImageList.class)))
+                () -> artifactory
+                        .restCall(request)
+                        .parseBody(DockerImageList.class)))
                 .get()
                 .forEach(this::cleanDockerTags);
     }
@@ -78,6 +80,8 @@ public class DockerImagesCleaner {
         LOGGER.info("Delete tag: {} from image: {}", tag, imageName);
 
         Try.of(Retry.decorateCheckedSupplier(retry,
-                () -> artifactory.repository(repoKey).delete(imageName + "/" + tag)));
+                () -> artifactory
+                        .repository(repoKey)
+                        .delete(imageName + "/" + tag)));
     }
 }
