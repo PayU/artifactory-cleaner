@@ -27,6 +27,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.MultipleFailuresError;
 
+import io.github.resilience4j.retry.Retry;
+
 class ConfigTest {
 
     @BeforeEach
@@ -78,6 +80,16 @@ class ConfigTest {
                 () -> assertConfig(config));
 
         assertEquals(6, failuresError.getFailures().size());
+    }
+
+    @Test
+    public void defaultConfigForRetry() {
+
+        Config config = new Config();
+
+        Retry retry = config.getRetry();
+
+        assertEquals(12, retry.getRetryConfig().getMaxAttempts());
     }
 
     private void assertConfig(Config config) {

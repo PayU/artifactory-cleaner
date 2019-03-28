@@ -17,6 +17,8 @@
 
 package com.payu.artifactory.tools;
 
+import java.util.Arrays;
+
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.ArtifactoryClientBuilder;
 import org.jfrog.artifactory.client.model.Version;
@@ -24,6 +26,8 @@ import org.jfrog.artifactory.client.model.Version;
 import com.payu.artifactory.tools.docker.DockerImagesCleaner;
 import com.payu.artifactory.tools.snapshot.SnapshotCleaner;
 
+import io.github.resilience4j.retry.Retry;
+import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -46,11 +50,20 @@ public final class CleanerMain {
         LOGGER.info("Artifactory version: {}, rev: {}, addons: {}", version.getVersion(), version.getRevision(),
                 version.getAddons());
 
-        config.getSnapshotRepo().ifPresent(snapshotRepo -> config.getReleaseRepo().ifPresent(
-                releaseRepo -> new SnapshotCleaner(artifactory, snapshotRepo, releaseRepo).execute()));
+        Retry retry = config.getRetry();
 
-        config.getDockerRepository().ifPresent(
-                dockerRepository -> new DockerImagesCleaner(artifactory, dockerRepository).execute());
+        Try<Void> job1 = Try.run(() ->
+                config.getSnapshotRepo().ifPresent(snapshotRepo -> config.getReleaseRepo().ifPresent(
+                        releaseRepo -> new SnapshotCleaner(artifactory, retry, snapshotRepo, releaseRepo).execute())))
+                .onFailure(e -> LOGGER.error("", e));
+
+
+        Try<Void> job2 = Try.run(() ->
+                config.getDockerRepository().ifPresent(
+                        dockerRepository -> new DockerImagesCleaner(artifactory, retry, dockerRepository).execute()))
+                .onFailure(e -> LOGGER.error("", e));
+
+        Try.sequence(Arrays.asList(job1, job2)).get();
     }
 
 

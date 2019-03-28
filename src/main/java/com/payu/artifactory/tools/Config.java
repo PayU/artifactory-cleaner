@@ -21,9 +21,12 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.Properties;
 
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -91,5 +94,28 @@ public class Config {
 
     public Optional<String> getReleaseRepo() {
         return getProperty("artifactory.release.repo.name");
+    }
+
+    public Optional<Integer> getRetryCount() {
+        return getProperty("artifactory.retry.count").map(Integer::valueOf);
+    }
+
+    public Optional<Integer> getRetrySleep() {
+        return getProperty("artifactory.retry.sleep").map(Integer::valueOf);
+    }
+
+    public Retry getRetry() {
+
+        RetryConfig retryConfig = RetryConfig.custom()
+                .maxAttempts(getRetryCount().orElse(12))
+                .waitDuration(Duration.ofSeconds(getRetrySleep().orElse(15)))
+                .build();
+
+        Retry retry = Retry.of("id", retryConfig);
+
+        retry.getEventPublisher()
+                .onRetry(e -> LOGGER.warn("Retry attempt: #" + e.getNumberOfRetryAttempts(),  e.getLastThrowable()));
+
+        return retry;
     }
 }

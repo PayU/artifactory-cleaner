@@ -22,15 +22,16 @@ You can provide configuration file location in property: `artifactory.properties
 
 Configuration items:
 
-| Property                       | Description                            |
----------------------------------| -------------------------------------- |
-| artifactory.url                | artifactory address                    |
-| artifactory.user               | user name                              |
-| artifactory.password           | user password, can be encrypted        |
-| artifactory.docker.repo.name   | repository name with docker image      |
-| artifactory.snapshot.repo.name | repository name with snapshot versions |
-| artifactory.release.repo.name  | repository name with release versions  |
-
+| Property                       | Description                                                         |
+|--------------------------------| --------------------------------------------------------------------|
+| artifactory.url                | artifactory address                                                 | 
+| artifactory.user               | user name                                                           |
+| artifactory.password           | user password, can be encrypted                                     |
+| artifactory.docker.repo.name   | repository name with docker image                                   |
+| artifactory.snapshot.repo.name | repository name with snapshot versions                              |
+| artifactory.release.repo.name  | repository name with release versions                               |
+| artifactory.retry.count        | how many time retry failed request to artifactory - default 12      |
+| artifactory.retry.sleep        | sleep in second  between each retry for failed request - default 15 |
 
 Run
 

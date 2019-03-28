@@ -19,23 +19,24 @@ package com.payu.artifactory.tools.docker;
 
 import static org.jfrog.artifactory.client.ArtifactoryRequest.Method.GET;
 
-import java.io.IOException;
 import java.util.Objects;
 
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.impl.ArtifactoryRequestImpl;
 
-import com.payu.artifactory.tools.util.WrappedException;
-
+import io.github.resilience4j.retry.Retry;
+import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class DockerImagesCleaner {
 
     private final Artifactory artifactory;
+    private final Retry retry;
     private final String repoKey;
 
-    public DockerImagesCleaner(Artifactory artifactory, String repoKey) {
+    public DockerImagesCleaner(Artifactory artifactory, Retry retry, String repoKey) {
+        this.retry = retry;
         Objects.requireNonNull(artifactory, "artifactory must be set");
         this.artifactory = artifactory;
         this.repoKey = repoKey;
@@ -43,18 +44,16 @@ public class DockerImagesCleaner {
 
     public void execute() {
 
-        try {
-            ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
-                    .apiUrl("api/docker/" + repoKey + "/v2/_catalog")
-                    .method(GET);
+        ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
+                .apiUrl("api/docker/" + repoKey + "/v2/_catalog")
+                .method(GET);
 
-            artifactory.restCall(request)
-                    .parseBody(DockerImageList.class)
-                    .forEach(this::cleanDockerTags);
-
-        } catch (IOException e) {
-            throw new WrappedException(e);
-        }
+        Try.of(Retry.decorateCheckedSupplier(retry,
+                () -> artifactory
+                        .restCall(request)
+                        .parseBody(DockerImageList.class)))
+                .get()
+                .forEach(this::cleanDockerTags);
     }
 
 
@@ -62,26 +61,27 @@ public class DockerImagesCleaner {
 
         LOGGER.info("Clean tags in image: {}", imageName);
 
-        try {
-            ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
-                    .apiUrl("api/docker/" + repoKey + "/v2/" + imageName + "/tags/list")
-                    .method(GET);
+        ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
+                .apiUrl("api/docker/" + repoKey + "/v2/" + imageName + "/tags/list")
+                .method(GET);
 
-            DockerImageTagList tagList = artifactory.restCall(request)
-                    .parseBody(DockerImageTagList.class);
+        DockerImageTagList tagList = Try.of(Retry.decorateCheckedSupplier(retry,
+                () -> artifactory.restCall(request).parseBody(DockerImageTagList.class)))
+                .get();
 
-            tagList.parallelStream()
-                    .filter(tag -> tag.endsWith("-SNAPSHOT"))
-                    .filter(tagList::containsReleaseForSnapshot)
-                    .forEach(tag -> deleteTag(imageName, tag));
+        tagList.parallelStream()
+                .filter(tag -> tag.endsWith("-SNAPSHOT"))
+                .filter(tagList::containsReleaseForSnapshot)
+                .forEach(tag -> deleteTag(imageName, tag));
 
-        } catch (IOException e) {
-            throw new WrappedException(e);
-        }
     }
 
     private void deleteTag(String imageName, String tag) {
         LOGGER.info("Delete tag: {} from image: {}", tag, imageName);
-        artifactory.repository(repoKey).delete(imageName + "/" + tag);
+
+        Try.of(Retry.decorateCheckedSupplier(retry,
+                () -> artifactory
+                        .repository(repoKey)
+                        .delete(imageName + "/" + tag)));
     }
 }

@@ -19,26 +19,30 @@ package com.payu.artifactory.tools.snapshot;
 
 import static org.jfrog.artifactory.client.ArtifactoryRequest.Method.GET;
 
-import java.io.IOException;
 import java.util.Objects;
 
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.impl.ArtifactoryRequestImpl;
 
-import com.payu.artifactory.tools.util.WrappedException;
-
+import io.github.resilience4j.retry.Retry;
+import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class SnapshotCleaner {
 
+    private static final String SNAPSHOT = "-SNAPSHOT";
+
     private final Artifactory artifactory;
+    private final Retry retry;
     private final String snapshotRepo;
     private final String releaseRepo;
 
-    public SnapshotCleaner(Artifactory artifactory, String snapshotRepo, String releaseRepo) {
+    public SnapshotCleaner(Artifactory artifactory, Retry retry, String snapshotRepo, String releaseRepo) {
         Objects.requireNonNull(artifactory, "artifactory must be set");
+        Objects.requireNonNull(retry, "retry must be set");
         this.artifactory = artifactory;
+        this.retry = retry;
         this.snapshotRepo = snapshotRepo;
         this.releaseRepo = releaseRepo;
     }
@@ -50,16 +54,15 @@ public class SnapshotCleaner {
 
     private StorageList getStorageList(String repo, String path) {
 
-        try {
-            ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
-                    .apiUrl("api/storage/" + repo + path)
-                    .method(GET);
+        ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
+                .apiUrl("api/storage/" + repo + path)
+                .method(GET);
 
-            return artifactory.restCall(request)
-                    .parseBody(StorageList.class);
-        } catch (IOException e) {
-            throw new WrappedException(e);
-        }
+        return Try.of(Retry.decorateCheckedSupplier(retry,
+                () -> artifactory
+                        .restCall(request)
+                        .parseBody(StorageList.class)))
+                .get();
     }
 
     private void walk(String path) {
@@ -70,17 +73,17 @@ public class SnapshotCleaner {
 
         storageList.getChildren().parallelStream()
                 .filter(StorageChildren::isFolder)
-                .filter(c -> c.getUri().endsWith("-SNAPSHOT"))
+                .filter(c -> c.getUri().endsWith(SNAPSHOT))
                 .forEach(c -> checkSnapshot(path + c.getUri()));
 
         storageList.getChildren().stream()
                 .filter(StorageChildren::isFolder)
-                .filter(c -> !c.getUri().endsWith("-SNAPSHOT"))
+                .filter(c -> !c.getUri().endsWith(SNAPSHOT))
                 .forEach(c -> walk(path + c.getUri()));
     }
 
     private void checkSnapshot(String path) {
-        StorageList storageList = getStorageList(releaseRepo, path.replace("-SNAPSHOT", ""));
+        StorageList storageList = getStorageList(releaseRepo, path.replace(SNAPSHOT, ""));
 
         if (!storageList.getChildren().isEmpty()) {
             LOGGER.info("Delete: {}{}", snapshotRepo, path);

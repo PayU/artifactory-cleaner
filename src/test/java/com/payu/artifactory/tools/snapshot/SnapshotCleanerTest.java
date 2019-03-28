@@ -19,6 +19,7 @@ package com.payu.artifactory.tools.snapshot;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -36,7 +37,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.payu.artifactory.tools.util.WrappedException;
+import io.github.resilience4j.retry.Retry;
 
 @ExtendWith(MockitoExtension.class)
 class SnapshotCleanerTest {
@@ -49,6 +50,8 @@ class SnapshotCleanerTest {
 
     @Mock
     private RepositoryHandle repository;
+
+    private Retry retry = Retry.ofDefaults("test");
 
     @Test
     public void shouldDeleteSnapshotForExistingRelease() throws IOException {
@@ -63,7 +66,7 @@ class SnapshotCleanerTest {
         when(artifactory.repository(SNAPSHOT_REPO)).thenReturn(repository);
 
         //when
-        new SnapshotCleaner(artifactory, SNAPSHOT_REPO, RELEASE_REPO).execute();
+        new SnapshotCleaner(artifactory, retry, SNAPSHOT_REPO, RELEASE_REPO).execute();
 
         // then
         verify(repository).delete("/test-1.0-SNAPSHOT");
@@ -77,9 +80,10 @@ class SnapshotCleanerTest {
         when(artifactory.restCall(any(ArtifactoryRequest.class))).thenThrow(new IOException());
 
         //when
-        Assertions.assertThrows(WrappedException.class,
-                () -> new SnapshotCleaner(artifactory, SNAPSHOT_REPO, RELEASE_REPO).execute());
+        Assertions.assertThrows(IOException.class,
+                () -> new SnapshotCleaner(artifactory, retry, SNAPSHOT_REPO, RELEASE_REPO).execute());
 
+        verify(artifactory, times(3)).restCall(any(ArtifactoryRequest.class));
         verifyNoMoreInteractions(artifactory);
         verifyNoMoreInteractions(repository);
     }
