@@ -17,16 +17,20 @@
 
 package com.payu.artifactory.tools.snapshot;
 
-import static org.jfrog.artifactory.client.ArtifactoryRequest.Method.GET;
-
-import java.util.Objects;
-
-import org.jfrog.artifactory.client.Artifactory;
-import org.jfrog.artifactory.client.impl.ArtifactoryRequestImpl;
-
 import io.github.resilience4j.retry.Retry;
 import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.maven.artifact.versioning.ComparableVersion;
+import org.jfrog.artifactory.client.Artifactory;
+import org.jfrog.artifactory.client.ArtifactoryRequest;
+import org.jfrog.artifactory.client.impl.ArtifactoryRequestImpl;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class SnapshotCleaner {
@@ -47,47 +51,74 @@ public class SnapshotCleaner {
         this.releaseRepo = releaseRepo;
     }
 
-
     public void execute() {
-        walk("");
-    }
+        String itemsQuery = getItemsQuery();
 
-    private StorageList getStorageList(String repo, String path) {
+        LOGGER.info("Finding maven items with query: {}", itemsQuery);
 
-        ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
-                .apiUrl("api/storage/" + repo + path)
-                .method(GET);
+        ArtifactoryRequest request = new ArtifactoryRequestImpl()
+                .method(ArtifactoryRequest.Method.POST)
+                .apiUrl("api/search/aql")
+                .requestType(ArtifactoryRequest.ContentType.TEXT)
+                .responseType(ArtifactoryRequest.ContentType.JSON)
+                .requestBody(itemsQuery);
 
-        return Try.of(Retry.decorateCheckedSupplier(retry,
+        AQLItems items = Try.of(
+            Retry.decorateCheckedSupplier(
+                retry,
                 () -> artifactory
-                        .restCall(request)
-                        .parseBody(StorageList.class)))
-                .get();
+                    .restCall(request)
+                    .parseBody(AQLItems.class)
+            )
+        ).get();
+
+        Map<String, List<String>> pv = items.getResults().stream().collect(
+            Collectors.groupingBy(AQLItem::getPath, Collectors.mapping(AQLItem::getVersion, Collectors.toList()))
+        );
+        pv.replaceAll((k, v) -> getSnapshotsToDelete(k, v));
+        pv.entrySet().stream().forEach(e -> deleteSnapshots(e.getKey(), e.getValue()));
     }
 
-    private void walk(String path) {
+    private static List<String> getSnapshotsToDelete(String key, List<String> input) {
+        List<String> result = null;
 
-        LOGGER.info("Walk in: {}{}", snapshotRepo, path);
+        Optional<ComparableVersion> newestRelease = input.stream()
+                .filter(c -> !c.endsWith(SNAPSHOT))
+                .max((v1, v2) -> new ComparableVersion(v1).compareTo(new ComparableVersion(v2)))
+                .map(s -> new ComparableVersion(s));
 
-        StorageList storageList = getStorageList(snapshotRepo, path);
+        if (newestRelease.isPresent()) {
+            ComparableVersion newest = newestRelease.get();
+            result = input.stream()
+                        .filter(c -> c.endsWith(SNAPSHOT) && newest.compareTo(new ComparableVersion(c)) > 0)
+                        .collect(Collectors.toList());
+        } else {
+            result = Collections.emptyList();
+        }
 
-        storageList.getChildren().parallelStream()
-                .filter(StorageChildren::isFolder)
-                .filter(c -> c.getUri().endsWith(SNAPSHOT))
-                .forEach(c -> checkSnapshot(path + c.getUri()));
-
-        storageList.getChildren().stream()
-                .filter(StorageChildren::isFolder)
-                .filter(c -> !c.getUri().endsWith(SNAPSHOT))
-                .forEach(c -> walk(path + c.getUri()));
+        return result;
     }
 
-    private void checkSnapshot(String path) {
-        StorageList storageList = getStorageList(releaseRepo, path.replace(SNAPSHOT, ""));
+    private String getItemsQuery() {
+        StringBuilder result = new StringBuilder("items.find({");
 
-        if (!storageList.getChildren().isEmpty()) {
-            LOGGER.info("Delete: {}{}", snapshotRepo, path);
-            artifactory.repository(snapshotRepo).delete(path);
+        if (snapshotRepo.equals(releaseRepo)) {
+            result.append("\"repo\":\"").append(snapshotRepo).append('"');
+        } else {
+            result.append("\"$or\":[{");
+            result.append("\"repo\":\"").append(snapshotRepo).append("\",\"repo\":\"").append(releaseRepo);
+            result.append("\"}]");
+        }
+
+        result.append(",\"name\":{\"$match\":\"*.pom\"}}).include(\"path\").sort({\"$asc\":[\"path\"]})");
+        return result.toString();
+    }
+
+    private void deleteSnapshots(String path, List<String> versions) {
+        for (String version: versions) {
+            String fp = path + "/" + version;
+            LOGGER.info("Delete: {}/{}", snapshotRepo, fp);
+            artifactory.repository(snapshotRepo).delete(fp);
         }
     }
 }
