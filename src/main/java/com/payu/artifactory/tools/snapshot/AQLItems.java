@@ -18,13 +18,15 @@
 package com.payu.artifactory.tools.snapshot;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import lombok.Getter;
 
 @Getter
 @SuppressWarnings("PMD.UnusedPrivateField") // false positive
-public class StorageList {
+public class AQLItems {
 
-    private final List<StorageChildren> children = new ArrayList<>();
+    private final Set<AQLItem> results = new HashSet<>();
 }

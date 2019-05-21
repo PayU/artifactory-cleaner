@@ -82,6 +82,12 @@
             </dependency>
 
             <dependency>
+                <groupId>org.apache.maven</groupId>
+                <artifactId>maven-artifact</artifactId>
+                <version>3.0.4</version>
+            </dependency>
+
+            <dependency>
                 <groupId>io.github.resilience4j</groupId>
                 <artifactId>resilience4j-retry</artifactId>
                 <version>0.13.2</version>
@@ -129,6 +135,11 @@
         <dependency>
             <groupId>org.jfrog.artifactory.client</groupId>
             <artifactId>artifactory-java-client-services</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-artifact</artifactId>
         </dependency>
 
         <dependency>

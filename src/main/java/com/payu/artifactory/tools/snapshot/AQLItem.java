@@ -18,15 +18,28 @@
 package com.payu.artifactory.tools.snapshot;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
-@AllArgsConstructor
 @NoArgsConstructor
+@EqualsAndHashCode
 @SuppressWarnings("PMD.UnusedPrivateField") // false positive
-public class StorageChildren {
+public class AQLItem {
 
-    private String uri;
-    private boolean folder;
+    private String path;
+
+    private String version;
+
+    public void setPath(String path) {
+        int last = path.lastIndexOf('/');
+
+        if (last == -1) {
+            throw new IllegalArgumentException("no slash character in path " + path);
+        }
+
+        this.path = path.substring(0, last);
+        this.version = path.substring(last + 1);
+    }
 }

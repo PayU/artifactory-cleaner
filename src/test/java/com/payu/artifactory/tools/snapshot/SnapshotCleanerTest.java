@@ -69,8 +69,9 @@ class SnapshotCleanerTest {
         new SnapshotCleaner(artifactory, retry, SNAPSHOT_REPO, RELEASE_REPO).execute();
 
         // then
-        verify(repository).delete("/test-1.0-SNAPSHOT");
-        verify(repository).delete("/test-test/test-1.4-SNAPSHOT");
+        verify(repository).delete("/a/b/c/8-SNAPSHOT");
+        verify(repository).delete("/test/1.0-SNAPSHOT");
+        verify(repository).delete("/test/1.1-SNAPSHOT");
         verifyNoMoreInteractions(repository);
     }
 
@@ -90,54 +91,34 @@ class SnapshotCleanerTest {
 
     private ArtifactoryResponse aResponse(String apiUrl) throws IOException {
         switch (apiUrl) {
-            case "api/storage/" + SNAPSHOT_REPO:
-                return aStorageListResponse(this::aStorageListRootForSnapshot);
-
-            case "api/storage/" + RELEASE_REPO + "/test-1.0":
-                return aStorageListResponse(this::aStorageListRootForRelease);
-
-            case "api/storage/" + RELEASE_REPO + "/test-1.1":
-                return aStorageListResponse(StorageList::new);
-
-            case "api/storage/" + SNAPSHOT_REPO + "/test-test":
-                return aStorageListResponse(this::aStorageListRootForSnapshotSubItem);
-
-            case "api/storage/" + RELEASE_REPO + "/test-test/test-1.4":
-                return aStorageListResponse(this::aStorageListRootForRelease);
-
+            case "api/search/aql":
+                return aqlItemsResponse(this::aqlItemsSupplier);
             default:
                 throw new IllegalArgumentException("Unknown api call: " + apiUrl);
         }
     }
 
 
-    private ArtifactoryResponse aStorageListResponse(Supplier<StorageList> action) throws IOException {
+    private ArtifactoryResponse aqlItemsResponse(Supplier<AQLItems> action) throws IOException {
         ArtifactoryResponse response = mock(ArtifactoryResponse.class);
-        when(response.parseBody(StorageList.class)).thenReturn(action.get());
+        when(response.parseBody(AQLItems.class)).thenReturn(action.get());
         return response;
     }
 
-    private StorageList aStorageListRootForSnapshot() {
-        StorageList storageList = new StorageList();
-        storageList.getChildren().add(new StorageChildren("/test-1.0-SNAPSHOT", true));
-        storageList.getChildren().add(new StorageChildren("/test-1.1-SNAPSHOT", true));
-        storageList.getChildren().add(new StorageChildren("/test-1.3-SNAPSHOT", false));
-        storageList.getChildren().add(new StorageChildren("/test-1.2", false));
-        storageList.getChildren().add(new StorageChildren("/test-test", true));
-        storageList.getChildren().add(new StorageChildren());
-        return storageList;
+    private AQLItems aqlItemsSupplier() {
+        AQLItems items = new AQLItems();
+        items.getResults().add(getItem("/test/1.0-SNAPSHOT"));
+        items.getResults().add(getItem("/test/1.1-SNAPSHOT"));
+        items.getResults().add(getItem("/test/1.2"));
+        items.getResults().add(getItem("/test/1.3-SNAPSHOT"));
+        items.getResults().add(getItem("/a/b/c/8-SNAPSHOT"));
+        items.getResults().add(getItem("/a/b/c/10"));
+        return items;
     }
 
-    private StorageList aStorageListRootForSnapshotSubItem() {
-        StorageList storageList = new StorageList();
-        storageList.getChildren().add(new StorageChildren("/test-1.4-SNAPSHOT", true));
-        return storageList;
+    private AQLItem getItem(String path) {
+        AQLItem item = new AQLItem();
+        item.setPath(path);
+        return item;
     }
-
-    private StorageList aStorageListRootForRelease() {
-        StorageList storageList = new StorageList();
-        storageList.getChildren().add(new StorageChildren("/something", false));
-        return storageList;
-    }
-
 }
