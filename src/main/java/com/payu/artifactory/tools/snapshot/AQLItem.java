@@ -17,7 +17,6 @@
 
 package com.payu.artifactory.tools.snapshot;
 
-import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,7 +24,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @EqualsAndHashCode
-@SuppressWarnings("PMD.UnusedPrivateField") // false positive
+@SuppressWarnings({"PMD.UnusedPrivateField", "PMD.SingularField"}) // false positives
 public class AQLItem {
 
     private String path;

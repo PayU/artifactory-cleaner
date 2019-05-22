@@ -17,12 +17,10 @@
 
 package com.payu.artifactory.tools.snapshot;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 import lombok.Getter;
+
+import java.util.HashSet;
+import java.util.Set;
 
 @Getter
 @SuppressWarnings("PMD.UnusedPrivateField") // false positive
