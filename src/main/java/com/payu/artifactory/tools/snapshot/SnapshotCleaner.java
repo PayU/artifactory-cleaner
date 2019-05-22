@@ -111,7 +111,7 @@ public class SnapshotCleaner {
             result.append("\"}]");
         }
 
-        result.append(",\"name\":{\"$match\":\"*.pom\"}}).include(\"path\")");
+        result.append(",\"name\":{\"$match\":\"*.pom\"}}).include(\"repo\",\"path\",\"name\")");
         return result.toString();
     }
 
