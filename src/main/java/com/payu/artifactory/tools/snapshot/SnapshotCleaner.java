@@ -75,11 +75,11 @@ public class SnapshotCleaner {
         Map<String, List<String>> pv = items.getResults().stream().collect(
             Collectors.groupingBy(AQLItem::getPath, Collectors.mapping(AQLItem::getVersion, Collectors.toList()))
         );
-        pv.replaceAll((k, v) -> getSnapshotsToDelete(k, v));
+        pv.replaceAll((k, v) -> getSnapshotsToDelete(v));
         pv.entrySet().stream().forEach(e -> deleteSnapshots(e.getKey(), e.getValue()));
     }
 
-    private static List<String> getSnapshotsToDelete(String key, List<String> input) {
+    private static List<String> getSnapshotsToDelete(List<String> input) {
         List<String> result = null;
 
         Optional<ComparableVersion> newestRelease = input.stream()
@@ -100,17 +100,18 @@ public class SnapshotCleaner {
     }
 
     private String getItemsQuery() {
-        StringBuilder result = new StringBuilder("items.find({");
+        StringBuilder result = new StringBuilder(100);
+        result.append("items.find({");
 
         if (snapshotRepo.equals(releaseRepo)) {
             result.append("\"repo\":\"").append(snapshotRepo).append('"');
         } else {
-            result.append("\"$or\":[{");
-            result.append("\"repo\":\"").append(snapshotRepo).append("\",\"repo\":\"").append(releaseRepo);
+            result.append("\"$or\":[{\"repo\":\"").append(snapshotRepo);
+            result.append("\",\"repo\":\"").append(releaseRepo);
             result.append("\"}]");
         }
 
-        result.append(",\"name\":{\"$match\":\"*.pom\"}}).include(\"path\").sort({\"$asc\":[\"path\"]})");
+        result.append(",\"name\":{\"$match\":\"*.pom\"}}).include(\"path\")");
         return result.toString();
     }
 
