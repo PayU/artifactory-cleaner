@@ -17,6 +17,10 @@
 
 package com.payu.artifactory.tools;
 
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -24,10 +28,6 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.Properties;
-
-import io.github.resilience4j.retry.Retry;
-import io.github.resilience4j.retry.RetryConfig;
-import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class Config {
@@ -86,6 +86,14 @@ public class Config {
 
     public Optional<String> getDockerRepository() {
         return getProperty("artifactory.docker.repo.name");
+    }
+
+    public int getDockerTagsToKeep() {
+        return getProperty("artifactory.docker.tags.to.keep").map(Integer::valueOf).orElse(5);
+    }
+
+    public Optional<String> getDockerFilterFile() {
+        return getProperty("artifactory.docker.filter.file");
     }
 
     public Optional<String> getSnapshotRepo() {

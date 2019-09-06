@@ -17,16 +17,27 @@
 
 package com.payu.artifactory.tools.docker;
 
-import static org.jfrog.artifactory.client.ArtifactoryRequest.Method.GET;
-
-import java.util.Objects;
-
-import org.jfrog.artifactory.client.Artifactory;
-import org.jfrog.artifactory.client.impl.ArtifactoryRequestImpl;
-
 import io.github.resilience4j.retry.Retry;
 import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
+import org.jfrog.artifactory.client.Artifactory;
+import org.jfrog.artifactory.client.ArtifactoryRequest;
+import org.jfrog.artifactory.client.impl.ArtifactoryRequestImpl;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 public class DockerImagesCleaner {
@@ -34,50 +45,118 @@ public class DockerImagesCleaner {
     private final Artifactory artifactory;
     private final Retry retry;
     private final String repoKey;
+    private final int tagsToKeep;
+    private final List<Pattern> filters = new ArrayList<>();
 
-    public DockerImagesCleaner(Artifactory artifactory, Retry retry, String repoKey) {
+    public DockerImagesCleaner(
+            Artifactory artifactory, Retry retry, String repoKey, int tagsToKeep, String filterFile
+    ) {
         this.retry = retry;
         Objects.requireNonNull(artifactory, "artifactory must be set");
         this.artifactory = artifactory;
         this.repoKey = repoKey;
+        this.tagsToKeep = tagsToKeep;
+
+        LOGGER.info("Acting upon {} repo and keeping {} newest tags", repoKey, tagsToKeep);
+
+        if (filterFile != null) {
+            LOGGER.info("Using filter file {}", filterFile);
+
+            try (Stream<String> stream = Files.lines(Paths.get(filterFile))) {
+                stream
+                        .filter(l -> !l.isEmpty())
+                        .filter(l -> l.charAt(0) != '#')
+                        .map(l -> Pattern.compile(l))
+                        .forEach(filters::add);
+            } catch (IOException e) {
+                throw new IllegalArgumentException(e);
+            }
+
+            LOGGER.info("Loaded {} filters", filters.size());
+        }
     }
 
+    @SuppressWarnings("PMD.GuardLogStatementJavaUtil") // false positive
     public void execute() {
+        String itemsQuery = "items.find({\"$and\": [{\"repo\": \""
+                + repoKey
+                + "\"},{\"name\": \"manifest.json\"}]}).include(\"repo\",\"path\",\"name\",\"modified\")";
 
-        ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
-                .apiUrl("api/docker/" + repoKey + "/v2/_catalog")
-                .method(GET);
+        LOGGER.info("Finding docker items with query: {}", itemsQuery);
 
-        Try.of(Retry.decorateCheckedSupplier(retry,
-                () -> artifactory
-                        .restCall(request)
-                        .parseBody(DockerImageList.class)))
-                .get()
-                .forEach(this::cleanDockerTags);
+        ArtifactoryRequest request = new ArtifactoryRequestImpl()
+                .method(ArtifactoryRequest.Method.POST)
+                .apiUrl("api/search/aql")
+                .requestType(ArtifactoryRequest.ContentType.TEXT)
+                .responseType(ArtifactoryRequest.ContentType.JSON)
+                .requestBody(itemsQuery);
+
+        AQLItems items = Try.of(
+                Retry.decorateCheckedSupplier(
+                        retry,
+                        () -> artifactory
+                                .restCall(request)
+                                .parseBody(AQLItems.class)
+                )
+        ).get();
+
+        Map<String, List<AQLItem>> pv = items.getResults().stream().collect(
+                Collectors.groupingBy(AQLItem::getPath, Collectors.toList())
+        );
+
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US);
+
+        pv.forEach(
+                (image, versions) -> {
+                    versions.sort(new Comparator<AQLItem>() {
+                        @Override
+                        public int compare(AQLItem i1, AQLItem i2) {
+                            try {
+                                return format.parse(i2.getModified()).compareTo(format.parse(i1.getModified()));
+                            } catch (ParseException e) {
+                                throw new IllegalArgumentException(e);
+                            }
+                        }
+                    });
+
+                    if (LOGGER.isInfoEnabled()) {
+                        LOGGER.info("Processing image {}", image);
+                        LOGGER.info(
+                                "Newest tags:{}",
+                                versions.stream()
+                                        .limit(tagsToKeep)
+                                        .map(i -> i.getVersion()).reduce("", (s, e) -> s + " " + e)
+                        );
+                    }
+
+                    versions.stream().skip(tagsToKeep).forEach(
+                            item -> {
+                                if (isFiltered(item.getPath() + "/" + item.getVersion())) {
+                                    LOGGER.info("Filtered {}", item.getVersion());
+                                } else {
+                                    deleteTag(image, item.getVersion());
+                                }
+                            }
+                    );
+                }
+        );
     }
 
+    private boolean isFiltered(String path) {
+        boolean filtered = false;
 
-    private void cleanDockerTags(String imageName) {
+        for (Pattern p : filters) {
+            if (p.matcher(path).matches()) {
+                filtered = true;
+                break;
+            }
+        }
 
-        LOGGER.info("Clean tags in image: {}", imageName);
-
-        ArtifactoryRequestImpl request = new ArtifactoryRequestImpl()
-                .apiUrl("api/docker/" + repoKey + "/v2/" + imageName + "/tags/list")
-                .method(GET);
-
-        DockerImageTagList tagList = Try.of(Retry.decorateCheckedSupplier(retry,
-                () -> artifactory.restCall(request).parseBody(DockerImageTagList.class)))
-                .get();
-
-        tagList.parallelStream()
-                .filter(tag -> tag.endsWith("-SNAPSHOT"))
-                .filter(tagList::containsReleaseForSnapshot)
-                .forEach(tag -> deleteTag(imageName, tag));
-
+        return filtered;
     }
 
     private void deleteTag(String imageName, String tag) {
-        LOGGER.info("Delete tag: {} from image: {}", tag, imageName);
+        LOGGER.info("Delete tag {}", tag);
 
         Try.of(Retry.decorateCheckedSupplier(retry,
                 () -> artifactory

@@ -17,16 +17,7 @@
 
 package com.payu.artifactory.tools.docker;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
-
-import java.io.IOException;
-import java.util.Arrays;
-
+import io.github.resilience4j.retry.Retry;
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.ArtifactoryRequest;
 import org.jfrog.artifactory.client.ArtifactoryResponse;
@@ -37,7 +28,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import io.github.resilience4j.retry.Retry;
+import java.io.IOException;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DockerImagesCleanerTest {
@@ -59,22 +57,19 @@ class DockerImagesCleanerTest {
     @Test
     public void snapshotShouldBeDeletedForExistingReleaseVersion() throws IOException {
 
-
         // given
-
-        doReturn(aDockerImageList()).when(response).parseBody(DockerImageList.class);
-        doReturn(aDockerImageTagList()).when(response).parseBody(DockerImageTagList.class);
+        doReturn(aqlItemsSupplier()).when(response).parseBody(AQLItems.class);
 
         when(artifactory.restCall(any(ArtifactoryRequest.class))).thenReturn(response);
 
         when(artifactory.repository(TEST_REPO)).thenReturn(repository);
 
         // when
-        new DockerImagesCleaner(artifactory, retry, TEST_REPO).execute();
+        new DockerImagesCleaner(artifactory, retry, TEST_REPO, 2, null).execute();
 
         // then
-        verify(repository).delete(PAYU_TEST_IMAGE + "/1.0-SNAPSHOT");
-        verify(repository).delete(PAYU_TEST_IMAGE + "/1.2-SNAPSHOT");
+        verify(repository).delete(PAYU_TEST_IMAGE + "/1.1");
+        verify(repository).delete(PAYU_TEST_IMAGE + "/1.2");
         verifyNoMoreInteractions(artifactory);
         verifyNoMoreInteractions(response);
         verifyNoMoreInteractions(repository);
@@ -88,7 +83,7 @@ class DockerImagesCleanerTest {
 
         //when
         Assertions.assertThrows(IOException.class,
-                () -> new DockerImagesCleaner(artifactory, retry, TEST_REPO).execute());
+                () -> new DockerImagesCleaner(artifactory, retry, TEST_REPO, 4, null).execute());
 
         // then
         verify(artifactory, times(3)).restCall(any(ArtifactoryRequest.class));
@@ -97,17 +92,21 @@ class DockerImagesCleanerTest {
         verifyNoMoreInteractions(repository);
     }
 
-    private DockerImageTagList aDockerImageTagList() {
-        DockerImageTagList dockerImageTagList = new DockerImageTagList();
-        dockerImageTagList.getTags().addAll(
-                Arrays.asList("1.0", "1.0-SNAPSHOT", "1.1", "1.2-SNAPSHOT", "1.3-SNAPSHOT", "1.2"));
-        return dockerImageTagList;
-
+    private AQLItems aqlItemsSupplier() {
+        AQLItems items = new AQLItems();
+        items.getResults().add(getItem(PAYU_TEST_IMAGE + "/1.1", "2000-05-05T16:44:30.629+02:00"));
+        items.getResults().add(getItem(PAYU_TEST_IMAGE + "/1.2", "2001-05-05T16:44:30.629+02:00"));
+        items.getResults().add(getItem(PAYU_TEST_IMAGE + "/1.3", "2002-05-05T16:44:30.629+02:00"));
+        items.getResults().add(getItem(PAYU_TEST_IMAGE + "/1.4", "2003-05-05T16:44:30.629+02:00"));
+        items.getResults().add(getItem("abcd/1.1", "1998-05-05T16:44:30.629+02:00"));
+        items.getResults().add(getItem("abcd/1.2", "1999-05-05T16:44:30.629+02:00"));
+        return items;
     }
 
-    private DockerImageList aDockerImageList() {
-        DockerImageList dockerImageList = new DockerImageList();
-        dockerImageList.getRepositories().add(PAYU_TEST_IMAGE);
-        return dockerImageList;
+    private AQLItem getItem(String path, String modified) {
+        AQLItem item = new AQLItem();
+        item.setPath(path);
+        item.setModified(modified);
+        return item;
     }
 }

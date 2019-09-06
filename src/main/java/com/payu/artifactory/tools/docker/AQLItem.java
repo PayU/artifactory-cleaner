@@ -17,23 +17,34 @@
 
 package com.payu.artifactory.tools.docker;
 
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
-
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
-public class DockerImageTagList {
+@NoArgsConstructor
+@EqualsAndHashCode
+@SuppressWarnings({"PMD.UnusedPrivateField", "PMD.SingularField"}) // false positives
+public class AQLItem {
 
-    private final List<String> tags = new ArrayList<>();
+    private String path;
 
-    public Stream<String> parallelStream() {
-        return tags.parallelStream();
+    private String version;
+
+    private String modified;
+
+    public void setPath(String path) {
+        int last = path.lastIndexOf('/');
+
+        if (last == -1) {
+            throw new IllegalArgumentException("no slash character in path " + path);
+        }
+
+        this.path = path.substring(0, last);
+        this.version = path.substring(last + 1);
     }
 
-    public boolean containsReleaseForSnapshot(String tag) {
-        return tags.contains(tag.replace("-SNAPSHOT", ""));
+    public void setModified(String modified) {
+        this.modified = modified;
     }
 }

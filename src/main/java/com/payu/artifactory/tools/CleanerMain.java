@@ -17,18 +17,16 @@
 
 package com.payu.artifactory.tools;
 
-import java.util.Arrays;
-
+import com.payu.artifactory.tools.docker.DockerImagesCleaner;
+import com.payu.artifactory.tools.snapshot.SnapshotCleaner;
+import io.github.resilience4j.retry.Retry;
+import io.vavr.control.Try;
+import lombok.extern.slf4j.Slf4j;
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.ArtifactoryClientBuilder;
 import org.jfrog.artifactory.client.model.Version;
 
-import com.payu.artifactory.tools.docker.DockerImagesCleaner;
-import com.payu.artifactory.tools.snapshot.SnapshotCleaner;
-
-import io.github.resilience4j.retry.Retry;
-import io.vavr.control.Try;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Arrays;
 
 @Slf4j
 public final class CleanerMain {
@@ -37,7 +35,6 @@ public final class CleanerMain {
     }
 
     private void execute() {
-
         Config config = new Config();
 
         Artifactory artifactory = ArtifactoryClientBuilder.create()
@@ -46,26 +43,38 @@ public final class CleanerMain {
                 .setPassword(config.getPassword())
                 .build();
 
-        Version version = artifactory.system().version();
-        LOGGER.info("Artifactory version: {}, rev: {}, addons: {}", version.getVersion(), version.getRevision(),
-                version.getAddons());
+        Version v = artifactory.system().version();
+        LOGGER.info("Artifactory version: {}, rev: {}, addons: {}", v.getVersion(), v.getRevision(), v.getAddons());
 
         Retry retry = config.getRetry();
 
-        Try<Void> job1 = Try.run(() ->
-                config.getSnapshotRepo().ifPresent(snapshotRepo -> config.getReleaseRepo().ifPresent(
-                        releaseRepo -> new SnapshotCleaner(artifactory, retry, snapshotRepo, releaseRepo).execute())))
-                .onFailure(e -> LOGGER.error("", e));
+        Try<Void> job1 = Try.run(
+                () -> config.getSnapshotRepo().ifPresent(
+                        snapshotRepo -> config.getReleaseRepo().ifPresent(
+                                releaseRepo -> new SnapshotCleaner(
+                                        artifactory,
+                                        retry,
+                                        snapshotRepo,
+                                        releaseRepo
+                                ).execute()
+                        )
+                )
+        ).onFailure(e -> LOGGER.error("", e));
 
-
-        Try<Void> job2 = Try.run(() ->
-                config.getDockerRepository().ifPresent(
-                        dockerRepository -> new DockerImagesCleaner(artifactory, retry, dockerRepository).execute()))
-                .onFailure(e -> LOGGER.error("", e));
+        Try<Void> job2 = Try.run(
+                () -> config.getDockerRepository().ifPresent(
+                        repo -> new DockerImagesCleaner(
+                                artifactory,
+                                retry,
+                                repo,
+                                config.getDockerTagsToKeep(),
+                                config.getDockerFilterFile().orElse(null)
+                        ).execute()
+                )
+        ).onFailure(e -> LOGGER.error("", e));
 
         Try.sequence(Arrays.asList(job1, job2)).get();
     }
-
 
     public static void main(String[] args) {
         new CleanerMain().execute();
