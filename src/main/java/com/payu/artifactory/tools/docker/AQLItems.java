@@ -17,18 +17,14 @@
 
 package com.payu.artifactory.tools.docker;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
-
 import lombok.Getter;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Getter
-public class DockerImageList {
+@SuppressWarnings("PMD.UnusedPrivateField") // false positive
+public class AQLItems {
 
-    private final List<String> repositories = new ArrayList<>();
-
-    public void forEach(Consumer<? super String> action) {
-        repositories.forEach(action);
-    }
+    private final Set<AQLItem> results = new HashSet<>();
 }

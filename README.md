@@ -2,10 +2,10 @@
 
 This application help us to clear unused items from artifactory.
 
-## Delete snapshot tags from docker images
+## Delete tags from docker repository
 
-When we have some image with tag `image:1.0-SNAPSHOT`, and we release `image:1.0`
-then tag `1.0-SNAPSHOT` will be deleted for the image.
+Delete all tags except the newest ones. By default 5 newest tags of each image are kept. Filter mechanism
+is provided based on regular expressions.
 
 ## Delete snapshots from maven repository
 
@@ -21,16 +21,18 @@ You can provide configuration file location in property: `artifactory.properties
 
 Configuration items:
 
-| Property                       | Description                                                         |
-|--------------------------------| --------------------------------------------------------------------|
-| artifactory.url                | artifactory address                                                 | 
-| artifactory.user               | user name                                                           |
-| artifactory.password           | user password, can be encrypted                                     |
-| artifactory.docker.repo.name   | repository name with docker image                                   |
-| artifactory.snapshot.repo.name | repository name with snapshot versions                              |
-| artifactory.release.repo.name  | repository name with release versions                               |
-| artifactory.retry.count        | how many time retry failed request to artifactory - default 12      |
-| artifactory.retry.sleep        | sleep in second  between each retry for failed request - default 15 |
+| Property                        | Description                                                         |
+|---------------------------------| --------------------------------------------------------------------|
+| artifactory.url                 | artifactory address                                                 | 
+| artifactory.user                | user name                                                           |
+| artifactory.password            | user password, can be encrypted                                     |
+| artifactory.docker.repo.name    | repository name with docker image                                   |
+| artifactory.docker.tags.to.keep | number of newest tags to keep in each image - default 5             |
+| artifactory.docker.filter.file  | path to file with filters, each line is a regexp to image path      |
+| artifactory.snapshot.repo.name  | repository name with snapshot versions                              |
+| artifactory.release.repo.name   | repository name with release versions                               |
+| artifactory.retry.count         | how many time retry failed request to artifactory - default 12      |
+| artifactory.retry.sleep         | sleep in second  between each retry for failed request - default 15 |
 
 Run
 
