@@ -90,7 +90,7 @@
             <dependency>
                 <groupId>io.github.resilience4j</groupId>
                 <artifactId>resilience4j-retry</artifactId>
-                <version>0.13.2</version>
+                <version>1.4.0</version>
             </dependency>
 
             <dependency>
