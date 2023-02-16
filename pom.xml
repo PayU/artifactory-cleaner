@@ -35,7 +35,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <slf4j-api.version>1.7.25</slf4j-api.version>
-        <junit-jupiter.version>5.3.2</junit-jupiter.version>
+        <junit-jupiter.version>5.9.2</junit-jupiter.version>
     </properties>
 
     <dependencyManagement>
