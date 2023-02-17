@@ -17,16 +17,21 @@
 
 package com.payu.artifactory.tools;
 
-import com.payu.artifactory.tools.docker.DockerImagesCleaner;
-import com.payu.artifactory.tools.snapshot.SnapshotCleaner;
-import io.github.resilience4j.retry.Retry;
-import io.vavr.control.Try;
-import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.ArtifactoryClientBuilder;
 import org.jfrog.artifactory.client.model.Version;
 
-import java.util.Arrays;
+import com.payu.artifactory.tools.docker.DockerImagesCleaner;
+import com.payu.artifactory.tools.releases.ReleasesCleaner;
+import com.payu.artifactory.tools.snapshot.SnapshotCleaner;
+
+import io.github.resilience4j.retry.Retry;
+import io.vavr.control.Try;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public final class CleanerMain {
@@ -48,7 +53,9 @@ public final class CleanerMain {
 
         Retry retry = config.getRetry();
 
-        Try<Void> job1 = Try.run(
+        List<Try<Void>> jobs = new ArrayList<>();
+
+        jobs.add(Try.run(
                 () -> config.getSnapshotRepo().ifPresent(
                         snapshotRepo -> config.getReleaseRepo().ifPresent(
                                 releaseRepo -> new SnapshotCleaner(
@@ -59,9 +66,9 @@ public final class CleanerMain {
                                 ).execute()
                         )
                 )
-        ).onFailure(e -> LOGGER.error("", e));
+        ).onFailure(e -> LOGGER.error("", e)));
 
-        Try<Void> job2 = Try.run(
+        jobs.add(Try.run(
                 () -> config.getDockerRepository().ifPresent(
                         repo -> new DockerImagesCleaner(
                                 artifactory,
@@ -71,9 +78,15 @@ public final class CleanerMain {
                                 config.getDockerFilterFile().orElse(null)
                         ).execute()
                 )
-        ).onFailure(e -> LOGGER.error("", e));
+        ).onFailure(e -> LOGGER.error("", e)));
 
-        Try.sequence(Arrays.asList(job1, job2)).get();
+        config.getReleaseCleanConfigs()
+                .orElseGet(Collections::emptyList).stream()
+                .map(relConfig -> new ReleasesCleaner(artifactory, retry, relConfig))
+                .map(cleaner -> Try.run(cleaner::execute).onFailure(e -> LOGGER.error("", e)))
+                .forEach(jobs::add);
+
+        Try.sequence(jobs).get();
     }
 
     public static void main(String[] args) {
