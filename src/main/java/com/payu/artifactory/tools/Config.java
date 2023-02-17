@@ -19,6 +19,7 @@ package com.payu.artifactory.tools;
 
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
+import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.FileInputStream;
@@ -26,6 +27,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -35,6 +38,10 @@ public class Config {
     private static final String DEFAULT_PROPERTIES_FILE_PATH = "artifactory-cleaner.properties";
 
     private final Properties properties;
+
+    Config(Properties properties) {
+        this.properties = properties;
+    }
 
     public Config() {
 
@@ -55,6 +62,8 @@ public class Config {
                 properties.load(inputStream);
             } catch (IOException e) {
                 LOGGER.warn(e.getMessage());
+            } finally {
+                Try.run(inputStream::close);
             }
         } else {
             LOGGER.warn("File {} not found, configuration from system properties", path);
@@ -122,8 +131,26 @@ public class Config {
         Retry retry = Retry.of("id", retryConfig);
 
         retry.getEventPublisher()
-                .onRetry(e -> LOGGER.warn("Retry attempt: #" + e.getNumberOfRetryAttempts(),  e.getLastThrowable()));
+                .onRetry(e -> LOGGER.warn("Retry attempt: #" + e.getNumberOfRetryAttempts(), e.getLastThrowable()));
 
         return retry;
+    }
+
+    public Optional<List<String>> getReleaseCleanConfigs() {
+        List<String> result = new ArrayList<>();
+
+        int i = 1;
+        Optional<String> property;
+        do {
+            property = getProperty("artifactory.release.clean." + i);
+            property.ifPresent(result::add);
+            i++;
+        } while (property.isPresent());
+
+        if (result.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(result);
     }
 }
