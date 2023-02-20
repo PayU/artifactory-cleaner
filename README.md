@@ -33,7 +33,9 @@ Configuration items:
 | artifactory.release.repo.name   | repository name with release versions                                     |
 | artifactory.retry.count         | how many time retry failed request to artifactory - default 12            |
 | artifactory.retry.sleep         | sleep in second  between each retry for failed request - default 15       |
-| artifactory.release.clean.<N>   | clean old released components, it can ba many config items indexed by `N` |
+| artifactory.releaseUser         | user name used for released component clean                               |
+| artifactory.releasePassword     | user password used for released component clean                           |
+| artifactory.release.clean.\<N\> | clean old released components, it can be many config items indexed by `N` |
 
 ### artifactory.release.clean.<N> - format
 

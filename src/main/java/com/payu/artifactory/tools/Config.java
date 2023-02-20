@@ -93,6 +93,14 @@ public class Config {
         return getRequiredProperty("artifactory.password");
     }
 
+    public Optional<String> getReleaseUser() {
+        return getProperty("artifactory.releaseUser");
+    }
+
+    public Optional<String> getReleasePassword() {
+        return getProperty("artifactory.releasePassword");
+    }
+
     public Optional<String> getDockerRepository() {
         return getProperty("artifactory.docker.repo.name");
     }
