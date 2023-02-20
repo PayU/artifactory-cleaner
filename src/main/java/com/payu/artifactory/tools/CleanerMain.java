@@ -20,6 +20,7 @@ package com.payu.artifactory.tools;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import org.jfrog.artifactory.client.Artifactory;
 import org.jfrog.artifactory.client.ArtifactoryClientBuilder;
@@ -80,11 +81,22 @@ public final class CleanerMain {
                 )
         ).onFailure(e -> LOGGER.error("", e)));
 
-        config.getReleaseCleanConfigs()
-                .orElseGet(Collections::emptyList).stream()
-                .map(relConfig -> new ReleasesCleaner(artifactory, retry, relConfig))
-                .map(cleaner -> Try.run(cleaner::execute).onFailure(e -> LOGGER.error("", e)))
-                .forEach(jobs::add);
+        Optional<String> releaseUser = config.getReleaseUser();
+        Optional<String> releasePassword = config.getReleasePassword();
+
+        if (releaseUser.isPresent() && releasePassword.isPresent()) {
+            Artifactory artifactoryRelease = ArtifactoryClientBuilder.create()
+                    .setUrl(config.getArtifactoryURL())
+                    .setUsername(releaseUser.get())
+                    .setPassword(releasePassword.get())
+                    .build();
+
+            config.getReleaseCleanConfigs()
+                    .orElseGet(Collections::emptyList).stream()
+                    .map(relConfig -> new ReleasesCleaner(artifactoryRelease, retry, relConfig))
+                    .map(cleaner -> Try.run(cleaner::execute).onFailure(e -> LOGGER.error("", e)))
+                    .forEach(jobs::add);
+        }
 
         Try.sequence(jobs).get();
     }
