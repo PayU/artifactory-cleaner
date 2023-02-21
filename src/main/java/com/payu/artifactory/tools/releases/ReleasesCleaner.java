@@ -166,9 +166,6 @@ public class ReleasesCleaner {
 
     private void deletePath(AQLItemPath path) {
         LOGGER.info("Delete {}/{}", repo, path.getPath());
-
-        // TODO uncomment after tests
-        // artifactory.repository(repo).delete(path.getPath());
+        artifactory.repository(repo).delete(path.getPath());
     }
-
 }
